@@ -1,4 +1,11 @@
 PayPal Website Payments Pro Hosted Solution - ZenCart Plugin
-************************************************************
+============================================================
 
 Allows using PayPal's hosted credit card processing page in ZenCart as an iframe hosted payment flow.
+
+Installation
+============
+
+Download as zip (click Downloads button as above) then extract into the root directory of your ZenCart distribution.
+
+Then go to Modules -> Payments and configure Website Payments Pro - Hosted Solution as per your requirements.
