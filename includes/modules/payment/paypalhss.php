@@ -158,11 +158,15 @@ class paypalhss extends base {
 	    {
 	    	$hsscurrency = substr(MODULE_PAYMENT_PAYPALHSS_CURRENCY, 5);
 	    }
+
+
 	    if(!in_array($hsscurrency, array('AUD', 'CAD', 'EUR', 'GBP', 'JPY', 'USD')))
 	    {
 	    	$hsscurrency = 'USD';
 	    }
-		
+	        
+	        $order_amount = $this->calc_order_amount($order->info['total'], $hsscurrency, FALSE);
+
 		$fields = array(
 			'USER'=>$paypalapiusername,
 			'PWD'=>$paypalapipassword,
@@ -172,13 +176,13 @@ class paypalhss extends base {
 			'BUTTONCODE'=>'TOKEN',
 			'BUTTONTYPE'=>'PAYMENT',
 			'L_BUTTONVAR0'=>"currency_code=".$hsscurrency,
-			'L_BUTTONVAR1'=>"subtotal=".$order->info['subtotal'],
-			'L_BUTTONVAR2'=>"tax=".round($order->info['tax'],2),
-			'L_BUTTONVAR3'=>"shipping=".round($order->info['shipping_total'], 2),
-			'L_BUTTONVAR4'=>"amount=".round($order->info['total'], 2),
-			'L_BUTTONVAR5'=>"return=".zen_href_link(FILENAME_CHECKOUT_PROCESS, 'referer=paypal', 'SSL'),
-			'L_BUTTONVAR6'=>"cancel_return=".zen_href_link(FILENAME_CHECKOUT_PAYMENT, '', 'SSL'),
-			'L_BUTTONVAR7'=>"bn=ZenCart_HSS",
+			'L_BUTTONVAR1'=>"subtotal=".$this->calc_order_amount($order->info['subtotal'], $hsscurrency, TRUE),
+			'L_BUTTONVAR2'=>"tax=".$this->calc_order_amount($order->info['tax'], $hsscurrency, TRUE),
+			'L_BUTTONVAR3'=>"shipping=".$this->calc_order_amount($order->info['shipping_cost'], $hsscurrency, TRUE),
+			'L_BUTTONVAR4'=>"amount=".$this->calc_order_amount($order->info['total'], $hsscurrency, TRUE),
+			'L_BUTTONVAR5'=>html_entity_decode(zen_href_link(FILENAME_CHECKOUT_PROCESS, 'referer=paypal', 'SSL')),
+			'L_BUTTONVAR6'=>"cancel_return=".html_entity_decode(zen_href_link(FILENAME_CHECKOUT_PAYMENT, '', 'SSL')),
+			'L_BUTTONVAR7'=>"bn=OnTechnology_ShoppingCart_EC_AU",
 			'L_BUTTONVAR8'=>"address_override=true",
 			'L_BUTTONVAR9'=>"first_name=".$order->delivery['firstname'],
 			'L_BUTTONVAR10'=>"last_name=".$order->delivery['lastname'],
@@ -197,11 +201,11 @@ class paypalhss extends base {
 			'L_BUTTONVAR23'=>"billing_state=".$order->billing['state'],
 			'L_BUTTONVAR24'=>"billing_zip=".$order->billing['postcode'],
 			'L_BUTTONVAR25'=>"buyer_email=".$order->billing['email_address'],
-			'L_BUTTONVAR26'=>"notify_url=".zen_href_link('ipn_hss_handler.php', '', 'SSL',false,false,true),
+			'L_BUTTONVAR26'=>"notify_url=".html_entity_decode(zen_href_link('ipn_hss_handler.php', '', 'SSL',false,false,true)),
 			'L_BUTTONVAR27'=>"showHostedThankyouPage=false",
 			'L_BUTTONVAR28'=>"invoice=".(int)$_SESSION['customer_id'] . '-' . time() . '-[' . substr(preg_replace('/[^a-zA-Z0-9_]/', '', STORE_NAME), 0, 30) . ']',
 			'L_BUTTONVAR29'=>"paymentaction=".$paymentaction,
-			'L_BUTTONVAR30'=>"shopping_url=".zen_href_link(FILENAME_SHOPPING_CART, '', 'SSL'),
+			'L_BUTTONVAR30'=>"shopping_url=".html_entity_decode(zen_href_link(FILENAME_SHOPPING_CART, '', 'SSL')),
 			'L_BUTTONVAR31'=>"upload=1",
 			'L_BUTTONVAR32'=>"rm=2",
 			'L_BUTTONVAR33'=>"template=TemplateD",
@@ -211,7 +215,7 @@ class paypalhss extends base {
 			'L_BUTTONVAR37'=>"day_phone_a=".$paypalphone_a,
 			'L_BUTTONVAR38'=>"day_phone_b=".$paypalphone_b,
 			'L_BUTTONVAR39'=>"day_phone_c=".$paypalphone_c,
-			'L_BUTTONVAR40'=>"H_PhoneNumber=".$paypalphone
+			'L_BUTTONVAR40'=>"H_PhoneNumber=".$paypalphone,
 		);
 
 		$ch = curl_init();
@@ -223,10 +227,11 @@ class paypalhss extends base {
 		curl_setopt($ch, CURLOPT_POSTFIELDS, http_build_query($fields));
 		curl_setopt($ch, CURLOPT_SSL_VERIFYPEER, false);
 		curl_setopt($ch, CURLOPT_SSL_VERIFYHOST, 2);
-	
+	    	curl_setopt($ch, CURLOPT_VERBOSE, true);
+		
 		$apiresponse = curl_exec($ch);
 		$str = parse_str($apiresponse, $output);
-	
+		 
 		curl_close($ch);
 		
 	    $_SESSION['paypal_transaction_info'] = array($order->info['subtotal'], $order->info['currency']);
@@ -259,7 +264,7 @@ class paypalhss extends base {
   }
     
   function process_button() {
-	return '<!-- paypal hss -->';
+  	return '<!-- paypal hss -->';
   }
   /**
    * Determine the language to use when visiting the PayPal site
@@ -284,7 +289,7 @@ class paypalhss extends base {
   function before_process() {
     
     global $order_total_modules;
-      
+
 	$this->notify('NOTIFY_PAYMENT_PAYPAL_RETURN_TO_STORE');
 
 	$url = "https://api-3t.paypal.com/nvp";
@@ -294,14 +299,14 @@ class paypalhss extends base {
 	$paypalapiusername = MODULE_PAYMENT_PAYPALHSS_API_USERNAME;
 	$paypalapipassword = MODULE_PAYMENT_PAYPALHSS_API_PASSWORD;
 	$paypalapisignature = MODULE_PAYMENT_PAYPALHSS_API_SIGNATURE;
-		
+
 	$fields = array(
 		'USER'=>$paypalapiusername,
 		'PWD'=>$paypalapipassword,
 		'VERSION'=>'65.2',
 		'SIGNATURE'=>$paypalapisignature,
 		'METHOD'=>'GetTransactionDetails',
-		'TRANSACTIONID'=>$_GET['tx']
+		'TRANSACTIONID'=> $_POST['txn_id'] ? $_POST['txn_id'] : $_GET['tx']
 	);
 
 	$ch = curl_init();
@@ -401,6 +406,40 @@ class paypalhss extends base {
     $db->Execute("insert into " . TABLE_CONFIGURATION . " (configuration_title, configuration_key, configuration_value, configuration_description, configuration_group_id, sort_order, set_function, date_added) values ('Live or Sandbox', 'MODULE_PAYMENT_PAYPALHSS_SERVER', 'live', '<strong>Live: </strong>  Used to process Live transactions<br/><strong>Sandbox: </strong>For developers and testing', '6', '25', 'zen_cfg_select_option(array(\'live\', \'sandbox\'), ', now())");
 
     $this->notify('NOTIFY_PAYMENT_PAYPALHSS_INSTALLED');
+  }
+
+  /**
+   * Set the currency code -- use defaults if active currency is not a currency accepted by PayPal
+   */
+  function selectCurrency($val = '', $subset = 'EC') {
+    $ec_currencies = array('CAD', 'EUR', 'GBP', 'JPY', 'USD', 'AUD', 'CHF', 'CZK', 'DKK', 'HKD', 'HUF', 'NOK', 'NZD', 'PLN', 'SEK', 'SGD', 'THB', 'MXN', 'ILS', 'PHP', 'TWD', 'BRL', 'MYR');
+    $dp_currencies = array('CAD', 'EUR', 'GBP', 'JPY', 'USD', 'AUD');
+    $paypalSupportedCurrencies = ($subset == 'EC') ? $ec_currencies : $dp_currencies;
+
+    // if using Pro 2.0 (UK), only the 6 currencies are supported.
+    $paypalSupportedCurrencies = (MODULE_PAYMENT_PAYPALWPP_MODULE_MODE == 'Payflow-UK') ? $dp_currencies : $paypalSupportedCurrencies;
+
+    $my_currency = substr(MODULE_PAYMENT_PAYPALWPP_CURRENCY, 5);
+    if (MODULE_PAYMENT_PAYPALWPP_CURRENCY == 'Selected Currency') {
+      $my_currency = ($val == '') ? $_SESSION['currency'] : $val;
+    }
+
+    if (!in_array($my_currency, $paypalSupportedCurrencies)) {
+      $my_currency = (MODULE_PAYMENT_PAYPALWPP_MODULE_MODE == 'Payflow-UK') ? 'GBP' : 'USD';
+    }
+    return $my_currency;
+  }
+  /**
+   * Calculate the amount based on acceptable currencies
+   */
+  function calc_order_amount($amount, $paypalCurrency, $applyFormatting = false) {
+    global $currencies;
+    $amount = ($amount * $currencies->get_value($paypalCurrency));
+    if ($paypalCurrency == 'JPY') {
+      $amount = (int)$amount;
+      $applyFormatting = FALSE;
+    }
+    return ($applyFormatting ? number_format($amount, $currencies->get_decimal_places($paypalCurrency)) : $amount);
   }
   /**
    * Remove the module and all its settings
