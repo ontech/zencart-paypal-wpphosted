@@ -216,6 +216,7 @@ class paypalhss extends base {
 			'L_BUTTONVAR38'=>"day_phone_b=".$paypalphone_b,
 			'L_BUTTONVAR39'=>"day_phone_c=".$paypalphone_c,
 			'L_BUTTONVAR40'=>"H_PhoneNumber=".$paypalphone,
+			'L_BUTTONVAR41'=>"custom=zenid=".session_id(),
 		);
 
 		$ch = curl_init();
