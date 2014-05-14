@@ -7,6 +7,32 @@
  * @license http://www.zen-cart.com/license/2_0.txt GNU Public License V2.0
  */
 
+  function hss_select_pp_currency() {
+    if (MODULE_PAYMENT_PAYPALHSS_CURRENCY == 'Selected Currency') {
+      $my_currency = $_SESSION['currency'];
+    } else {
+      $my_currency = substr(MODULE_PAYMENT_PAYPALHSS_CURRENCY, 5);
+    }
+    $pp_currencies = array('CAD', 'EUR', 'GBP', 'JPY', 'USD', 'AUD', 'CHF', 'CZK', 'DKK', 'HKD', 'HUF', 'NOK', 'NZD', 'PLN', 'SEK', 'SGD', 'THB', 'MXN', 'ILS', 'PHP', 'TWD', 'BRL', 'MYR');
+    if (!in_array($my_currency, $pp_currencies)) {
+      $my_currency = 'USD';
+    }
+    return $my_currency;
+  }
+
+  function hss_valid_payment($amount, $currency, $mode = 'IPN') {
+    global $currencies;
+    $my_currency = hss_select_pp_currency();
+    $exchanged_amount = ($mode == 'IPN' ? ($amount * $currencies->get_value($my_currency)) : $amount);
+    $transaction_amount = preg_replace('/[^0-9.]/', '', number_format($exchanged_amount, $currencies->get_decimal_places($my_currency), '.', ''));
+    if ( ($_POST['mc_currency'] != $my_currency) || ($_POST['mc_gross'] != $transaction_amount && $_POST['mc_gross'] != -0.01) && MODULE_PAYMENT_PAYPALHSS_SERVER != 'sandbox' ) {
+      ipn_debug_email('IPN WARNING :: Currency/Amount Mismatch.  Details: ' . "\n" . 'PayPal email address = ' . $_POST['business'] . "\n" . ' | mc_currency = ' . $_POST['mc_currency'] . "\n" . ' | submitted_currency = ' . $my_currency . "\n" . ' | order_currency = ' . $currency . "\n" . ' | mc_gross = ' . $_POST['mc_gross'] . "\n" . ' | converted_amount = ' . $transaction_amount . "\n" . ' | order_amount = ' . $amount );
+      return false;
+    }
+    ipn_debug_email('IPN INFO :: Currency/Amount Details: ' . "\n" . 'PayPal email address = ' . $_POST['business'] . "\n" . ' | mc_currency = ' . $_POST['mc_currency'] . "\n" . ' | submitted_currency = ' . $my_currency . "\n" . ' | order_currency = ' . $currency . "\n" . ' | mc_gross = ' . $_POST['mc_gross'] . "\n" . ' | converted_amount = ' . $transaction_amount . "\n" . ' | order_amount = ' . $amount );
+    return true;
+  }
+
   /**
    * detect odd cases of extra-url-encoded POST data coming back from PayPal
    */
@@ -29,19 +55,6 @@
   require('includes/application_top.php');
 
   $extraDebug = (defined('IPN_EXTRA_DEBUG_DETAILS') && IPN_EXTRA_DEBUG_DETAILS == 'All');
-
-  if (  (defined('MODULE_PAYMENT_PAYPALWPP_DEBUGGING') && strstr(MODULE_PAYMENT_PAYPALWPP_DEBUGGING, 'Log')) ||
-      (defined('MODULE_PAYMENT_PAYPAL_IPN_DEBUG') && strstr(MODULE_PAYMENT_PAYPAL_IPN_DEBUG, 'Log')) ||
-      ($_REQUEST['ppdebug'] == 'on' && strstr(EXCLUDE_ADMIN_IP_FOR_MAINTENANCE, $_SERVER['REMOTE_ADDR'])) || $extraDebug  ) {
-    $show_all_errors = true;
-    $debug_logfile_path = ipn_debug_email('Breakpoint: 0 - Initializing debugging.');
-    if ($debug_logfile_path == '') $debug_logfile_path = 'includes/modules/payment/paypal/logs/ipn_debug_php_errors-'.time().'.log';
-    @ini_set('log_errors', 1);
-    @ini_set('log_errors_max_len', 0);
-    @ini_set('display_errors', 0); // do not output errors to screen/browser/client (only to log file)
-    @ini_set('error_log', DIR_FS_CATALOG . $debug_logfile_path);
-    error_reporting(version_compare(PHP_VERSION, 5.3, '>=') ? E_ALL & ~E_DEPRECATED & ~E_NOTICE : version_compare(PHP_VERSION, 6.0, '>=') ? E_ALL & ~E_DEPRECATED & ~E_NOTICE & ~E_STRICT : E_ALL & ~E_NOTICE);
-  }
 
   ipn_debug_email('Breakpoint: Flag Status:' . "\nisECtransaction = " . (int)$isECtransaction . "\nisDPtransaction = " . (int)$isDPtransaction);
   /**
@@ -217,7 +230,7 @@
       $order_totals = $order_total_modules->process();
       $zco_notifier->notify('NOTIFY_CHECKOUT_PROCESS_AFTER_ORDER_TOTALS_PROCESS');
 
-      if (valid_payment($order->info['total'], $_SESSION['currency']) === false && !$isECtransaction && !$isDPtransaction) {
+      if (hss_valid_payment($order->info['total'], $_SESSION['currency']) === false && !$isECtransaction && !$isDPtransaction) {
         ipn_debug_email('IPN NOTICE :: Failed because of currency mismatch.');
         die();
       }
@@ -240,17 +253,9 @@
         ipn_debug_email('Breakpoint: 5e - PP hist_data:' . print_r($sql_data_array, true));
         zen_db_perform(TABLE_PAYPAL_PAYMENT_STATUS_HISTORY, $sql_data_array);
         ipn_debug_email('Breakpoint: 5f - PP hist saved');
-        $new_status = MODULE_PAYMENT_PAYPAL_ORDER_STATUS_ID;
+        $new_status = MODULE_PAYMENT_PAYPALHSS_ORDER_STATUS_ID;
         ipn_debug_email('Breakpoint: 5g - new status code: ' . $new_status);
-        if ($_POST['payment_status'] =='Pending') {
-          $new_status = (defined('MODULE_PAYMENT_PAYPAL_PROCESSING_STATUS_ID') && (int)MODULE_PAYMENT_PAYPAL_PROCESSING_STATUS_ID > 0 ? (int)MODULE_PAYMENT_PAYPAL_PROCESSING_STATUS_ID : 2);
-          ipn_debug_email('Breakpoint: 5h - newer status code: ' . (int)$new_status);
-          $sql = "UPDATE " . TABLE_ORDERS  . "
-                  SET orders_status = " . (int)$new_status . "
-                  WHERE orders_id = '" . (int)$insert_id . "'";
-          $db->Execute($sql);
-          ipn_debug_email('Breakpoint: 5i - order table updated');
-        }
+        
         $sql_data_array = array('orders_id' => (int)$insert_id,
                                 'orders_status_id' => (int)$new_status,
                                 'date_added' => 'now()',
@@ -259,10 +264,7 @@
                                 );
         ipn_debug_email('Breakpoint: 5j - order stat hist update:' . print_r($sql_data_array, true));
         zen_db_perform(TABLE_ORDERS_STATUS_HISTORY, $sql_data_array);
-        if (MODULE_PAYMENT_PAYPAL_ADDRESS_OVERRIDE == '1') {
-          $sql_data_array['comments'] = '**** ADDRESS OVERRIDE ALERT!!! **** CHECK PAYPAL ORDER DETAILS FOR ACTUAL ADDRESS SELECTED BY CUSTOMER!!';
-          $sql_data_array['customer_notified'] = -1;
-        }
+
         zen_db_perform(TABLE_ORDERS_STATUS_HISTORY, $sql_data_array);
         ipn_debug_email('Breakpoint: 5k - OSH update done');
         $order->create_add_products($insert_id, 2);
@@ -334,32 +336,28 @@
         case 'voided':
         case ($_POST['payment_status'] == 'Refunded' || $_POST['payment_status'] == 'Reversed' || $_POST['payment_status'] == 'Voided'):
           //payment_status=Refunded or payment_status=Voided
-          $new_status = MODULE_PAYMENT_PAYPALWPP_REFUNDED_STATUS_ID;
-          if (defined('MODULE_PAYMENT_PAYPAL_REFUND_ORDER_STATUS_ID') && (int)MODULE_PAYMENT_PAYPAL_REFUND_ORDER_STATUS_ID > 0 && !$isECtransaction) $new_status = MODULE_PAYMENT_PAYPAL_REFUND_ORDER_STATUS_ID;
-          break;
+             break;
         case 'echeck-denied':
         case 'denied-echeck':
         case 'failed-echeck':
           //payment_status=Denied or failed
-          $new_status = ($isECtransaction ? MODULE_PAYMENT_PAYPALWPP_REFUNDED_STATUS_ID : MODULE_PAYMENT_PAYPAL_REFUND_ORDER_STATUS_ID);
           break;
         case 'echeck-cleared':
-          $new_status = (defined('MODULE_PAYMENT_PAYPAL_ORDER_STATUS_ID') ? MODULE_PAYMENT_PAYPAL_ORDER_STATUS_ID : 2);
+          $new_status = (defined('MODULE_PAYMENT_PAYPALHSS_ORDER_STATUS_ID') ? MODULE_PAYMENT_PAYPALHSS_ORDER_STATUS_ID : 2);
           break;
         case ($txn_type=='express-checkout-cleared' || substr($txn_type,0,8) == 'cleared-'):
           //express-checkout-cleared
-          $new_status = ($isECtransaction && defined('MODULE_PAYMENT_PAYPALWPP_ORDER_STATUS_ID') ? MODULE_PAYMENT_PAYPALWPP_ORDER_STATUS_ID : MODULE_PAYMENT_PAYPAL_ORDER_STATUS_ID);
+          $new_status = ($isECtransaction && defined('MODULE_PAYMENT_PAYPALHSS_ORDER_STATUS_ID') ? MODULE_PAYMENT_PAYPALHSS_ORDER_STATUS_ID : MODULE_PAYMENT_PAYPAL_ORDER_STATUS_ID);
           if ((int)$new_status == 0) $new_status = 2;
           break;
         case 'pending-auth':
           // pending authorization
-          $new_status = ($isECtransaction ? MODULE_PAYMENT_PAYPALWPP_REFUNDED_STATUS_ID : MODULE_PAYMENT_PAYPAL_REFUND_ORDER_STATUS_ID);
           break;
         case (substr($txn_type,0,7) == 'denied-'):
           // denied for any other reason - treat as pending for now
         case (substr($txn_type,0,8) == 'pending-'):
           // pending anything
-          $new_status = ($isECtransaction ? MODULE_PAYMENT_PAYPALWPP_ORDER_PENDING_STATUS_ID : MODULE_PAYMENT_PAYPAL_PROCESSING_STATUS_ID);
+          
           break;
       }
       // update order status history with new information
@@ -390,4 +388,3 @@
       ipn_debug_email('IPN NOTICE :: "Pending payment review" transaction for existing order. No action required. Waiting for PayPal to complete their Payment Review. Do not ship order until review is completed.');
       break;
   }
-}
