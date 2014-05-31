@@ -167,6 +167,14 @@ class paypalhss extends base {
 	        
 	        $order_amount = $this->calc_order_amount($order->info['total'], $hsscurrency, FALSE);
 
+		$order_subtotal = 0;
+		for ($i = 0, $n = sizeof($order->products); $i < $n; $i++)
+		{
+			$order_subtotal += $order->products[$i]['price'] * $order->products[$i]['qty'];
+		}
+
+		$order_shipping = $order->info['shipping_cost']-$order->info['shipping_tax'];
+		
 		$fields = array(
 			'USER'=>$paypalapiusername,
 			'PWD'=>$paypalapipassword,
@@ -176,11 +184,11 @@ class paypalhss extends base {
 			'BUTTONCODE'=>'TOKEN',
 			'BUTTONTYPE'=>'PAYMENT',
 			'L_BUTTONVAR0'=>"currency_code=".$hsscurrency,
-			'L_BUTTONVAR1'=>"subtotal=".$this->calc_order_amount($order->info['subtotal'], $hsscurrency, TRUE),
+			'L_BUTTONVAR1'=>"subtotal=".$this->calc_order_amount($order_subtotal, $hsscurrency, TRUE),
 			'L_BUTTONVAR2'=>"tax=".$this->calc_order_amount($order->info['tax'], $hsscurrency, TRUE),
-			'L_BUTTONVAR3'=>"shipping=".$this->calc_order_amount($order->info['shipping_cost'], $hsscurrency, TRUE),
+			'L_BUTTONVAR3'=>"shipping=".$this->calc_order_amount($order_shipping, $hsscurrency, TRUE),
 			'L_BUTTONVAR4'=>"amount=".$this->calc_order_amount($order->info['total'], $hsscurrency, TRUE),
-			'L_BUTTONVAR5'=>html_entity_decode(zen_href_link(FILENAME_CHECKOUT_PROCESS, 'referer=paypal', 'SSL')),
+			'L_BUTTONVAR5'=>"return=".html_entity_decode(zen_href_link(FILENAME_CHECKOUT_PROCESS, 'referer=paypal', 'SSL')),
 			'L_BUTTONVAR6'=>"cancel_return=".html_entity_decode(zen_href_link(FILENAME_CHECKOUT_PAYMENT, '', 'SSL')),
 			'L_BUTTONVAR7'=>"bn=OnTechnology_ShoppingCart_EC_AU",
 			'L_BUTTONVAR8'=>"address_override=true",
