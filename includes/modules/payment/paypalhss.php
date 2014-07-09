@@ -216,7 +216,7 @@ class paypalhss extends base {
 			'L_BUTTONVAR30'=>"shopping_url=".html_entity_decode(zen_href_link(FILENAME_SHOPPING_CART, '', 'SSL')),
 			'L_BUTTONVAR31'=>"upload=1",
 			'L_BUTTONVAR32'=>"rm=2",
-			'L_BUTTONVAR33'=>"template=TemplateD",
+			'L_BUTTONVAR33'=>"template=TemplateA",
 			'L_BUTTONVAR34'=>"night_phone_a=".$paypalphone_a,
 			'L_BUTTONVAR35'=>"night_phone_b=".$paypalphone_b,
 			'L_BUTTONVAR36'=>"night_phone_c=".$paypalphone_c,
